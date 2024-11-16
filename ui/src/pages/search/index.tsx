@@ -16,6 +16,7 @@ import {Button} from "@/components/custom/button.tsx";
 import {Input} from "@/components/ui/input.tsx";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card.tsx";
 import {Textarea} from "@/components/ui/textarea.tsx";
+import {Progress} from "@/components/ui/progress"
 import {
     Select,
     SelectContent,
@@ -24,12 +25,19 @@ import {
     SelectValue
 } from "@/components/ui/select.tsx";
 
+import frame1 from '@/assets/frame1.svg';
+import frame2 from '@/assets/frame2.svg';
+import frame3 from '@/assets/frame3.svg';
+import {BubbleChat} from "flowise-embed-react";
+import axios from 'axios';
+import {useEffect, useState} from "react";
+
 const FormSchema = z.object({
     title: z.string().min(2, {
         message: "Title must be at least 2 characters.",
     }),
-    image: z.any(),
-    description: z.string().optional(),
+    image: z.instanceof(FileList).optional(),
+    description: z.string(),
     region: z.string().optional(),
 })
 
@@ -38,22 +46,61 @@ export default function Search() {
         resolver: zodResolver(FormSchema),
         defaultValues: {
             title: "",
-            image: "",
+            image: undefined,
             description: "",
             region: "",
         },
     })
 
-    const onSubmit = (data: z.infer<typeof FormSchema>) => {
-        console.log(data);
+    const [isWaitingForSet, setIsWaitingForSet] = useState(false);
+    const [progress, setProgress] = useState(0)
 
-        toast("Event has been created", {
-            description: "Sunday, December 03, 2023 at 9:00 AM",
-            action: {
-                label: "Undo",
-                onClick: () => console.log("Undo"),
-            },
+
+    useEffect(() => {
+        if (isWaitingForSet) {
+            setProgress(20);
+        }
+    }, [isWaitingForSet]);
+
+    useEffect(() => {
+        if (progress < 100) {
+            const timer = setTimeout(() => {
+                setProgress(prevProgress => prevProgress + 1);
+            }, 50);
+
+            return () => clearTimeout(timer);
+        }
+    }, [progress]);
+
+    const imageRef = form.register("image");
+
+    const onSubmit = (data: z.infer<typeof FormSchema>) => {
+        const formData = new FormData();
+        formData.append("title", data.title);
+        // @ts-expect-error Array
+        formData.append("image", data.image[0]);
+        formData.append("description", data.description);
+
+        axios.post("http://192.168.0.150:3000/inputs", formData).then(() => {
+            setIsWaitingForSet(true);
+        }).catch(() => {
+            toast("Error with searching data. Backend problem.")
         })
+
+        //toast("Error with searching data. Backend problem.", {
+        //                 description: "Sunday, December 03, 2023 at 9:00 AM",
+        //                 action: {
+        //                     label: "Undo",
+        //                     onClick: () => console.log("Undo"),
+        //                 },
+        //             })
+    }
+
+    const getProgressName = () => {
+        if (progress > 0 && progress <= 20) return "Uploading data...";
+        if (progress > 20 && progress <= 40) return "Scanning image...";
+        if (progress > 40 && progress <= 60) return "Comparing data...";
+        if (progress > 60 && progress <= 100) return "Finishing...";
     }
 
     return (
@@ -64,9 +111,20 @@ export default function Search() {
 
             <Layout.Body>
                 <div className="grid grid-cols-5 gap-10">
-                    <Card className="col-span-3">
+                    <Card className="col-span-3 relative">
+                        {isWaitingForSet ? <div
+                            className="absolute h-full  w-full bg-gradient-to-r from-[#0072F5] to-[#5EA2EF] opacity-80 rounded-[11px]">
+                            <div
+                                className="absolute space-y-4 top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center w-2/3 ">
+                                <Progress value={progress} className="w-full"/>
+                                <div>
+                                    {getProgressName()}
+                                </div>
+                            </div>
+                        </div> : null}
                         <CardHeader className="px-6 pt-6 pb-3">
-                            <CardTitle>Search</CardTitle>
+                            <CardTitle
+                                className="tracking-tight inline font-semibold from-[#5EA2EF] to-[#0072F5]  bg-clip-text text-transparent bg-gradient-to-b">Search</CardTitle>
                             <CardDescription>Find your brand's products on various local marketplaces.</CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -91,12 +149,18 @@ export default function Search() {
                                     <FormField
                                         control={form.control}
                                         name="image"
-                                        render={({field}) => (
+                                        render={() => (
                                             <FormItem>
-                                                <FormLabel>Description</FormLabel>
+                                                <FormLabel>Image</FormLabel>
                                                 <FormControl>
-                                                    <Input type="file" placeholder="image" {...field}
-                                                           className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"/>
+                                                    <Input type="file" placeholder="shadcn" {...imageRef}
+                                                           className="flex h-9 w-full rounded-md border border-input
+                                                    bg-transparent px-3 py-1 text-base shadow-sm transition-colors
+                                                    file:border-0 file:bg-transparent file:text-sm file:font-medium
+                                                    file:text-foreground placeholder:text-muted-foreground
+                                                    focus-visible:outline-none focus-visible:ring-1
+                                                    focus-visible:ring-ring disabled:cursor-not-allowed
+                                                    disabled:opacity-50 md:text-sm"/>
                                                 </FormControl>
                                                 <FormDescription>
                                                     Upload the product image from your brand that you're searching for.
@@ -110,7 +174,7 @@ export default function Search() {
                                         name="description"
                                         render={({field}) => (
                                             <FormItem>
-                                                <FormLabel>Image</FormLabel>
+                                                <FormLabel>Description</FormLabel>
                                                 <FormControl>
                                                     <Textarea {...field}
                                                               placeholder="Brown leather jacked handwritten text"/>
@@ -220,14 +284,23 @@ export default function Search() {
                                         </div>
                                         <p className="text-sm text-muted-foreground mt-1">
                                             Utilize image or text-based comparison to find the most closely matched
-                                            products. This enables a detailed side-by-side evaluation to ensure a precise match.
+                                            products. This enables a detailed side-by-side evaluation to ensure a
+                                            precise match.
                                         </p>
                                     </div>
+                                </div>
+                            </div>
+                            <div className="flex items-center justify-center mt-4">
+                                <div className="grid grid-cols-3 items-center gap-x-8 w-2/3">
+                                    <img src={frame1} alt=""/>
+                                    <img src={frame2} alt=""/>
+                                    <img src={frame3} alt=""/>
                                 </div>
                             </div>
                         </CardContent>
                     </Card>
                 </div>
+                <BubbleChat chatflowid="28907114-56bd-4f75-be95-6aa7651faf2e" apiHost="http://192.168.0.7:3000"/>
             </Layout.Body>
         </Layout>
     )
